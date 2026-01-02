@@ -10,17 +10,15 @@ import fs from "node:fs/promises";
     process.exit(0);
   }
 
-  let filesize = 0;
   try {
     const fileinfo = await fs.stat(uploadedFileName);
-    filesize = fileinfo.size;
+    var filesize = fileinfo.size;
     if (fileinfo.isDirectory()) {
       console.log("You cannot provide a directory... Shutting down...");
       process.exit(0);
     }
   } catch (error) {
-    const err = error as Error;
-    if (err.message.match(/ENOENT/gi)) {
+    if (error instanceof Error && error.message.match(/ENOENT/gi)) {
       console.log("File '%s' not found", uploadedFileName);
     } else {
       console.log("Unknown error occured...");
@@ -28,23 +26,10 @@ import fs from "node:fs/promises";
     process.exit(0);
   }
 
-  const fh = await fs.open(uploadedFileName, "r");
-  const uploadFileRS = fh.createReadStream();
-
-  uploadFileRS.on("data", (chunk: Buffer) => {
-    process.stdout.moveCursor(0, -1);
-    process.stdout.clearLine(0);
-    console.log("Uploading... %f%", Math.floor(100 * uploadFileRS.bytesRead) / (filesize || 1));
-    socket.write(chunk);
-  });
-
-  uploadFileRS.on("end", () => {
-    console.log("Successfully uploaded!");
-    socket.end();
-    try {
-      fh.close();
-    } catch (error) {}
-  });
+  if (!filesize) {
+    console.log("Cannot retrieve the file size.");
+    process.exit(0);
+  }
 
   const socket = net.createConnection({
     host: "127.0.0.1",
@@ -57,15 +42,26 @@ import fs from "node:fs/promises";
     socket.write(Buffer.from("FILENAME:" + uploadedFileName + "DXDXDX"));
   });
 
-  function closeConnection(hasError: boolean) {
-    if (hasError) {
-      console.log("Something went wrong...");
-    } else {
-      console.log("Operation success!");
-    }
+  const fh = await fs.open(uploadedFileName, "r");
+  const uploadFileRS = fh.createReadStream();
 
-    console.log("Connection ended...");
-  }
-  socket.on("end", closeConnection.bind(this, false));
-  socket.on("error", closeConnection.bind(this, true));
+  uploadFileRS.on("data", (chunk: Buffer) => {
+    process.stdout.moveCursor(0, -1);
+    process.stdout.clearLine(0);
+    console.log("Uploading... %f%", Math.floor(100 * uploadFileRS.bytesRead) / filesize);
+    socket.write(chunk);
+  });
+
+  uploadFileRS.on("end", () => {
+    process.stdout.moveCursor(0, -1);
+    process.stdout.clearLine(0);
+    console.log("Successfully uploaded!");
+    socket.end();
+  });
+
+  socket.on("error", () => {
+    console.log("Something went wrong...");
+    fh.close();
+    socket.end();
+  });
 })();

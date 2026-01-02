@@ -5,19 +5,17 @@ import path from "node:path";
 import fsp from "node:fs/promises";
 
 (() => {
-  const server = net.createServer();
-
-  server.on("connection", (client) => {
-    console.log("New client connected... Client id: %d", client.remotePort);
-
+  const newConnectionHandler = async (client: net.Socket) => {
     const clientId = client.remotePort!;
+    console.log("New client connected... Client id: %d", clientId);
 
-    const newFilepath = path.join(process.cwd(), "out", `${randomUUID()}-${clientId}`);
+    const OUT_DIR = path.join(process.cwd(), "out");
 
-    client.on("close", async () => {
-      await fsp.rename(newFilepath, newFilepath + fileExt);
-    });
+    if (!fs.existsSync(OUT_DIR)) {
+      await fsp.mkdir(OUT_DIR);
+    }
 
+    const newFilepath = path.join(OUT_DIR, `${randomUUID()}-${clientId}`);
     const saveUploadedFileStream = fs.createWriteStream(newFilepath);
 
     let fileExt = "";
@@ -28,6 +26,8 @@ import fsp from "node:fs/promises";
       if (filename.includes("FILENAME:") && filename.includes("DXDXDX")) {
         const indexOfStart = filename.indexOf("FILENAME:");
         const indexOfEnd = filename.indexOf("DXDXDX");
+
+        // TODO: INVALID EXT EXTRACTION!
         const path = filename.slice(indexOfStart + 9, indexOfEnd).split(".");
         if (path.length > 2) {
           fileExt = "." + path.at(-1);
@@ -46,8 +46,16 @@ import fsp from "node:fs/promises";
     saveUploadedFileStream.on("drain", () => {
       client.resume();
     });
-  });
 
+    client.on("close", async () => {
+      if (fileExt !== "") {
+        await fsp.rename(newFilepath, newFilepath + fileExt);
+      }
+    });
+  };
+
+  const server = net.createServer();
+  server.on("connection", newConnectionHandler);
   server.listen({ port: 3000, host: "localhost" }, () => {
     console.log("Server has started...\n", server.address());
   });
