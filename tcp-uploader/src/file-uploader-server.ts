@@ -23,9 +23,9 @@ import fsp from "node:fs/promises";
     // TODO: this part may be cut, so make a workaround to grab from different buffers
     client.on("data", (chunk: Buffer) => {
       const filename = chunk.toString("utf-8");
-      if (filename.includes("FILENAME:") && filename.includes("DXDXDX")) {
+      if (filename.includes("FILENAME:") && filename.includes("------")) {
         const indexOfStart = filename.indexOf("FILENAME:");
-        const indexOfEnd = filename.indexOf("DXDXDX");
+        const indexOfEnd = filename.indexOf("------");
 
         // TODO: INVALID EXT EXTRACTION!
         const path = filename.slice(indexOfStart + 9, indexOfEnd).split(".");

@@ -31,37 +31,45 @@ import fs from "node:fs/promises";
     process.exit(0);
   }
 
-  const socket = net.createConnection({
-    host: "127.0.0.1",
-    port: 3000,
-  });
+  const socket = net.createConnection(
+    {
+      host: "127.0.0.1",
+      port: 3000,
+    },
+    async () => {
+      console.log("Successfully connected!");
+      console.log("Uploading of the file '%s' has started...", uploadedFileName);
+      socket.write("FILENAME:" + uploadedFileName + "------");
 
-  socket.on("connect", () => {
-    console.log("Successfully connected!");
-    console.log("Uploading of the file '%s' has started...", uploadedFileName);
-    socket.write(Buffer.from("FILENAME:" + uploadedFileName + "DXDXDX"));
-  });
+      const fh = await fs.open(uploadedFileName, "r");
+      const uploadFileRS = fh.createReadStream();
 
-  const fh = await fs.open(uploadedFileName, "r");
-  const uploadFileRS = fh.createReadStream();
+      uploadFileRS.on("data", (chunk: Buffer) => {
+        process.stdout.moveCursor(0, -1);
+        process.stdout.clearLine(0);
+        console.log("Uploading... %f%", Math.floor((100 * uploadFileRS.bytesRead) / filesize));
 
-  uploadFileRS.on("data", (chunk: Buffer) => {
-    process.stdout.moveCursor(0, -1);
-    process.stdout.clearLine(0);
-    console.log("Uploading... %f%", Math.floor(100 * uploadFileRS.bytesRead) / filesize);
-    socket.write(chunk);
-  });
+        if (!socket.write(chunk)) {
+          uploadFileRS.pause();
+        }
+      });
 
-  uploadFileRS.on("end", () => {
-    process.stdout.moveCursor(0, -1);
-    process.stdout.clearLine(0);
-    console.log("Successfully uploaded!");
-    socket.end();
-  });
+      socket.on("drain", () => {
+        uploadFileRS.resume();
+      });
 
-  socket.on("error", () => {
-    console.log("Something went wrong...");
-    fh.close();
-    socket.end();
-  });
+      uploadFileRS.on("end", () => {
+        process.stdout.moveCursor(0, -1);
+        process.stdout.clearLine(0);
+        console.log("Successfully uploaded!");
+        socket.end();
+      });
+
+      socket.on("error", () => {
+        console.log("Something went wrong...");
+        fh.close();
+        socket.end();
+      });
+    }
+  );
 })();
